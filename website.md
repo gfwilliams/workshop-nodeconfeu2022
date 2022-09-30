@@ -257,8 +257,11 @@ which were previously added with `E.on('myapp', ...)`.
 
 ## Next steps?
 
-We've used Bangle.js here because it's easy to use, but now you can
+* We've used Bangle.js here because it's easy to use, but now you can
 escape from the browser you can control all kinds of different things.
-
 There are a few bits of more tangible hardware at the front that
 you can experiment with!
+* You can push information to a website as well as pulling from it. You can use
+the same mechanisms to push information into a website -
+for example sensor data from Bangle.js/Puck.js/etc or even use the Web Bluetooth
+Advertising API to grab data from multiple sensors.
