@@ -20,6 +20,14 @@ more colourful screen than the Bangle.js 2.
 
 For full info on using it, see: https://www.espruino.com/Bangle.js
 
+## Puck.js
+
+![](http://www.espruino.com/refimages/boards_Puck.js_thumb.png)
+
+There are a few Puck.js devices - these have various sensors like
+accelerometer, temperature, magnetometer and gyro that can be used.
+
+http://www.espruino.com/Puck.js
 
 
 ## Pixl.js

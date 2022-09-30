@@ -51,7 +51,7 @@ So all we need to do now is check the text inside the odometer - let's try and g
 When the view count changes, the number does a quick animation, and during that period it's hard to extract the correct number. So in this case we
 can check for the `odometer-animating` class and ignore if it is set with `document.querySelector(".odometer").classList.contains("odometer-animating")`
 
-```
+```JS
 var lastViewCount;
 
 function changed(value) {
@@ -81,7 +81,7 @@ Every so often (when we call `poll`), we'll just check if there are any new bloc
 * When asked to open the URL, decline, and click the `Use the web version ` link
 * Now Open Chrome Devtools and paste the following into the console:
 
-```
+```JS
 var knownMessages = [];
 
 function changed(value) {
@@ -113,7 +113,7 @@ You can also check GitHub actions for the current status of the latest action.
 
 By running this in a `poll()` function that we call every so often, we can detect when this changes and push the data to the Bangle.
 
-```
+```JS
 var lastState;
 
 function changed(value) {
@@ -139,30 +139,30 @@ but because we're in a bookmarklet and we can't easily add external code, we're 
 
 Luckily it's not *that* bad! Paste this into the dev console of the page you were interested in getting information from:
 
-```
+```JS
 var bluetoothDevice, bluetoothServer, bluetoothService, bluetoothTX;
 function bluetoothConnect() {
-  // First, put up a window to choose our device
+  /*  First, put up a window to choose our device */
   navigator.bluetooth.requestDevice({ filters: [{services: ["6e400001-b5a3-f393-e0a9-e50e24dcca9e"]},{namePrefix: "Bangle.js"}]}).then(device => {
-    // Now connect to it
+    /*  Now connect to it */
     console.log('Connecting to GATT Server...');
     bluetoothDevice = device;
     return device.gatt.connect();
   }).then(function(server) {
-    // now get the 'UART' bluetooth service, so we can read and write!
+    /*  now get the 'UART' bluetooth service, so we can read and write! */
     console.log("Connected");    
     bluetoothServer = server;
     return server.getPrimaryService("6e400001-b5a3-f393-e0a9-e50e24dcca9e");
   }).then(function(service) {
-    // get the transmit service
+    /*  get the transmit service */
     bluetoothService = service;
     return bluetoothService.getCharacteristic("6e400002-b5a3-f393-e0a9-e50e24dcca9e");
   }).then(function(char) {
     bluetoothTX = char;
-    // get the receive service (for debugging!)
+    /*  get the receive service (for debugging!) */
     return bluetoothService.getCharacteristic("6e400003-b5a3-f393-e0a9-e50e24dcca9e");
   }).then(function(bluetoothRX) {
-    // respond to changes in the characteristic and write them to the console
+    /*  respond to changes in the characteristic and write them to the console */
     bluetoothRX.addEventListener('characteristicvaluechanged', function(event) {
       var ua = new Uint8Array(event.target.value.buffer);
       var str = "";
@@ -172,19 +172,20 @@ function bluetoothConnect() {
     return bluetoothRX.startNotifications();
   }).then(function() {    
     console.log("Completed!");
-//    setInterval(poll,1000);
+/*     setInterval(poll,1000); */
   });
 }
 
 function bluetoothWrite(str) {
-  // FIXME - does not split what it written based on MTU!
+  /*  FIXME - does not split what it written based on MTU! */
+  if (!bluetoothTX) return;
   var u = new Uint8Array(str.length);
   for (var i=0;i<str.length;i++)
     u[i] = str.charCodeAt(i);
   console.log("Writing ",JSON.stringify(str));
   bluetoothTX.writeValue(u.buffer).then(function() {
     console.log("Written!");
-  })
+  });
 }
 ```
 
@@ -203,7 +204,7 @@ Completed!
 
 * Now, you can type:
 
-```
+```JS
 bluetoothWrite("E.showMessage('Boom')\n")
 ```
 
@@ -227,10 +228,10 @@ Now we'll update the `changed` function to send an update to the Bangle...
 
 * Paste this into the dev console:
 
-```
+```JS
 function changed(value) {
   console.log("Changed!", value);
-  bluetoothWrite("E.showMessage("+JSON.stringify(value)+")\n");
+  bluetoothWrite(`E.showMessage(${JSON.stringify(value)})\n`);
 }
 ```
 
@@ -245,22 +246,263 @@ The next step is to automate it...
 updates every second.
 
 
-## Putting it all together
+## Creating the Bookmarklet
 
-A more option is to send an event on a global object. Then, if our
-app is running we can handle it, otherwise it is ignored:
+Rather than sending the full code we want to execute to the Bangle, a neater
+option is to send an event on a global object (`E` is handily short). Then, if our
+app is running we can handle it, otherwise it is ignored.
 
 We could send `E.emit('myapp', 123)`, which will then call any event handlers
 which were previously added with `E.on('myapp', ...)`.
 
+So to do that all we need is a slightly modified `changed` function - which
+can be pasted into the console.
 
+```JS
+function changed(value) {
+  console.log("Changed!", value);
+  bluetoothWrite(`E.emit('myapp',${JSON.stringify(value)})\n`);
+}
+```
+
+When this is done, the Bangle will stop updating - we need to make an app
+to display the data.
+
+But first, we'll create the bookmarklet. Open a text editor and paste in the code below,
+then enter your `poll` function where the comment is.
+
+```JS
+javascript:(function(){
+
+  /* =================================================
+   'poll' code in here!
+   it gets called automatically later on...
+    ================================================= */
+
+  /*  Bluetooth Handling   */
+  var bluetoothDevice, bluetoothServer, bluetoothService, bluetoothTX;
+  function bluetoothConnect() {
+    /*  First, put up a window to choose our device */
+    navigator.bluetooth.requestDevice({ filters: [{services: ["6e400001-b5a3-f393-e0a9-e50e24dcca9e"]},{namePrefix: "Bangle.js"}]}).then(device => {
+      /*  Now connect to it */
+      console.log('Connecting to GATT Server...');
+      bluetoothDevice = device;
+      return device.gatt.connect();
+    }).then(function(server) {
+      /*  now get the 'UART' bluetooth service, so we can read and write! */
+      console.log("Connected");    
+      bluetoothServer = server;
+      return server.getPrimaryService("6e400001-b5a3-f393-e0a9-e50e24dcca9e");
+    }).then(function(service) {
+      /*  get the transmit service */
+      bluetoothService = service;
+      return bluetoothService.getCharacteristic("6e400002-b5a3-f393-e0a9-e50e24dcca9e");
+    }).then(function(char) {
+      bluetoothTX = char;
+      /*  get the receive service (for debugging!) */
+      return bluetoothService.getCharacteristic("6e400003-b5a3-f393-e0a9-e50e24dcca9e");
+    }).then(function(bluetoothRX) {
+      /*  respond to changes in the characteristic and write them to the console */
+      bluetoothRX.addEventListener('characteristicvaluechanged', function(event) {
+        var ua = new Uint8Array(event.target.value.buffer);
+        var str = "";
+        ua.forEach(v => str += String.fromCharCode(v));
+        console.log("BT> "+JSON.stringify(str));
+      });
+      return bluetoothRX.startNotifications();
+    }).then(function() {    
+      console.log("Completed!");
+  /*     setInterval(poll,1000); */
+    });
+  }
+
+  function bluetoothWrite(str) {
+    /*  FIXME - does not split what it written based on MTU! */
+    if (!bluetoothTX) return;
+    var u = new Uint8Array(str.length);
+    for (var i=0;i<str.length;i++)
+      u[i] = str.charCodeAt(i);
+    console.log("Writing ",JSON.stringify(str));
+    bluetoothTX.writeValue(u.buffer).then(function() {
+      console.log("Written!");
+    });
+  }
+  /*  Send to Espruino */
+  function changed(value) {
+    console.log("Changed!", value);
+    bluetoothWrite(`E.emit('myapp',${JSON.stringify(value)})\n`);
+  }
+
+  /*  Initialise - we need something to click to start the Bluetooth connection */
+  var modal=document.createElement("div");modal.style="position:absolute;top:0px;left:0px;width:100%;height:100%;background:rgba(0,0,0,0.8);color:white;zIndex:10000;text-align:center";document.body.append(modal);
+  modal.onclick = function() {
+    document.body.removeChild(modal);
+    bluetoothConnect();
+    setInterval(poll, 1000);
+  };
+})();
+```
+
+**NOTE: You can't use `//` comments in your code** unless you're planning to minify
+before making it a bookmarklet. Chrome removes newlines in the code you paste in,
+so a single `//` would cover the whole remainder of the code.
+
+In the case of the YouTube bookmarklet it might look like this:
+
+```JS
+javascript:(function(){
+/*  read from livecounts.io */
+var lastViewCount;
+
+function poll() {
+  if (document.querySelector(".odometer").classList.contains("odometer-animating")) return;
+  var count = document.querySelector(".odometer").innerText.replace(/[^0-9]/g,"");
+  if (!lastViewCount || count!=lastViewCount) {
+    lastViewCount = count;
+    changed(count);
+  }    
+}
+/*  Bluetooth Handling   */
+var bluetoothDevice, bluetoothServer, bluetoothService, bluetoothTX;
+function bluetoothConnect() {
+  /*  First, put up a window to choose our device */
+  navigator.bluetooth.requestDevice({ filters: [{services: ["6e400001-b5a3-f393-e0a9-e50e24dcca9e"]},{namePrefix: "Bangle.js"}]}).then(device => {
+    /*  Now connect to it */
+    console.log('Connecting to GATT Server...');
+    bluetoothDevice = device;
+    return device.gatt.connect();
+  }).then(function(server) {
+    /*  now get the 'UART' bluetooth service, so we can read and write! */
+    console.log("Connected");    
+    bluetoothServer = server;
+    return server.getPrimaryService("6e400001-b5a3-f393-e0a9-e50e24dcca9e");
+  }).then(function(service) {
+    /*  get the transmit service */
+    bluetoothService = service;
+    return bluetoothService.getCharacteristic("6e400002-b5a3-f393-e0a9-e50e24dcca9e");
+  }).then(function(char) {
+    bluetoothTX = char;
+    /*  get the receive service (for debugging!) */
+    return bluetoothService.getCharacteristic("6e400003-b5a3-f393-e0a9-e50e24dcca9e");
+  }).then(function(bluetoothRX) {
+    /*  respond to changes in the characteristic and write them to the console */
+    bluetoothRX.addEventListener('characteristicvaluechanged', function(event) {
+      var ua = new Uint8Array(event.target.value.buffer);
+      var str = "";
+      ua.forEach(v => str += String.fromCharCode(v));
+      console.log("BT> "+JSON.stringify(str));
+    });
+    return bluetoothRX.startNotifications();
+  }).then(function() {    
+    console.log("Completed!");
+/*     setInterval(poll,1000); */
+  });
+}
+
+function bluetoothWrite(str) {
+  /*  FIXME - does not split what it written based on MTU! */
+  if (!bluetoothTX) return;
+  var u = new Uint8Array(str.length);
+  for (var i=0;i<str.length;i++)
+    u[i] = str.charCodeAt(i);
+  console.log("Writing ",JSON.stringify(str));
+  bluetoothTX.writeValue(u.buffer).then(function() {
+    console.log("Written!");
+  });
+}
+/*  Send to Espruino */
+function changed(value) {
+  console.log("Changed!", value);
+  bluetoothWrite(`E.emit('myapp',${JSON.stringify(value)})\n`);
+}
+/*  Initialise - we need something to click to start the Bluetooth connection */
+var modal=document.createElement("div");modal.style="position:absolute;top:0px;left:0px;width:100%;height:100%;background:rgba(0,0,0,0.8);color:white;zIndex:10000;text-align:center";document.body.append(modal);
+modal.onclick = function() {
+  document.body.removeChild(modal);
+  bluetoothConnect();
+  setInterval(poll, 1000);
+};
+})();
+```
+
+Now, in Chrome:
+
+* Go to `Bookmarks -> Bookmark Manager`
+* Select `Bookmarks bar` on the left.
+* Click the `Organize` link (top right), then `Add new bookmark`
+* Set the name as `Bangle.js Bookmarklet`
+* Copy the code from the text editor and patse it in under `URL`
+* Click `Save`
+
+## The App
+
+Now we're sending the `myapp` event on `E`, we need something to handle it
+on the Bangle.
+
+* Open the Web IDE at https://www.espruino.com/ide/
+* You may need to close any of the tabs you have open where you were experimenting
+so that they're not also trying to connect via Web Bluetooth
+* Now connect to your Bangle (top right)
+* Ensure `Upload` is set to `RAM` in the middle of the IDE's window
+* Copy the following into the editor on the right and modify as you see fit:
+
+```
+var value = "---";
+
+function draw() {
+  var R = Bangle.appRect;
+  g.reset().clearRect(R);
+  g.setFont("Vector",26).setFontAlign(0,0);
+  g.drawString(value, R.x + R.w/2, R.y + R.h/2);
+  g.setFont("12x20").drawString("View Count", R.x + R.w/2, R.y + R.h/2 - 30);
+}
+
+Bangle.loadWidgets();
+Bangle.drawWidgets();
+draw();
+
+E.on('myapp', function(v) {
+  value = v;
+  draw();
+});
+```
+
+* Now click `Upload`
+
+Your Bangle's screen should look a bit like this now:
+
+![](data:image/bmp;base64,Qk3KPAAAAAAAAEoAAAAMAAAAsACwAAEABAAAAAD/AAAA/wD//wAAAP//AP8A//////8AAAD/AAAA/wD//wAAAP//AP8A//////93d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3AAAAAHdwAAAAB3cAAAAAd3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3dwAAAAB3cAAAAAd3AAAAAHd3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3cAAAAAd3AAAAAHdwAAAAB3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3AHd3cAAAB3cAAAAHdwAAAAB3d3d3dwAAAHd3cAAAB3d3AAAAAHAHd3dwB3d3AAAHd3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3dwB3d3dwB3dwB3d3AHAHcAdwB3d3d3AHd3AHdwB3dwB3cAd3dwBwB3d3cAd3cAd3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3AAB3d3cAd3AHd3d3dwB3AHcAd3d3cAd3d3AHAHd3dwBwB3d3cAcAd3d3AHd3AHd3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3dwAAd3d3AHdwB3d3d3cAdwB3AHd3d3AHd3dwBwB3d3cAcAd3d3AHAHd3dwB3dwB3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3AHcAd3dwB3cAd3d3d3AHcAdwB3d3dwB3d3d3cAd3d3AHAHd3dwBwB3d3cAd3cAd3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3dwB3AHd3cAd3AAAAAABwB3AHcAd3d3cAd3d3d3AHd3dwBwB3d3cAcAd3d3AHd3AHd3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3cAdwB3d3AHdwB3d3cAcAdwB3AHd3d3AHd3d3dwB3d3cAcAd3d3AHAHd3dwB3dwB3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3dwB3dwB3dwB3cAd3d3AHAHd3dwB3d3dwB3d3d3cAd3d3AHAHd3dwBwB3d3cAd3cAd3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3cAd3cAd3cAd3AHd3dwBwB3d3cAd3d3cAd3d3d3AHd3dwBwB3d3cAcAd3d3AHd3AHd3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3AHd3AHd3AHd3AHd3AHcAd3d3AHd3d3AHd3d3d3AHd3AHcAd3d3AHAHd3cAd3dwB3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3dwB3dwB3AAB3d3AAAAd3AHd3dwB3d3dwB3d3d3d3AAAAd3AHd3dwBwAAAAB3cAAAAAd3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3AHd3dwB3d3d3d3d3d3d3d3d3d3d3d3cAd3d3AHd3d3d3d3d3d3d3d3d3d3d3d3AHd3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3dwB3d3cAd3AHd3d3d3d3d3d3d3d3d3d3AHd3dwB3d3d3d3d3d3d3d3d3d3d3d3dwB3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3cAd3d3AHdwB3d3d3d3d3d3d3d3d3d3d3AHd3AHd3d3d3d3d3d3d3d3d3d3d3d3cAd3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3AHd3dwB3cAd3d3d3d3d3d3d3d3d3d3d3AAAAd3d3d3d3d3d3d3d3d3d3d3d3d3AHd3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3dwAAAAAAB3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3EXd3d3cAAAAAAAd3d3d3d3d3cAAAB3d3d3dwAAAHd3dwAAAHd3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3F3d3ERF3d3d3dxEXd3d3ACIiIiAHd3d3d3d3d3AAAAd3d3d3cAAAB3d3cAAAB3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3dxd3cXdxd3d3d3cXEXd3dwAiIiIgB3d3d3dwB3AHd3dwB3d3d3d3d3AHd3d3d3AHd3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3cXd3cREXd3d3d3F3EXd3cAIiIiIAd3d3d3cAdwB3d3cAd3d3d3d3dwB3d3d3dwB3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3F3d3d3F3d3d3dxd3EXd3ACIiIiAHd3d3d3AHcAd3d3AHd3d3d3d3cAd3d3d3cAd3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3cREXdxEXd3dxF3cXdxF3dwAiIiIgB3d3d3dwB3AHd3dwB3d3d3d3d3AHd3d3d3AHd3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3cXd3d3d3d3dxF3F3EXd3cAIiIiIAd3d3d3cAdwB3d3cAdwB3d3d3dwB3d3d3dwB3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3cRF3d3d3d3dxFxcRd3d3ACIiIiAHd3d3d3AHcAd3d3AHcAd3d3d3cAd3d3d3cAd3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3dxERF3d3dwAiIiIgB3d3d3d3d3dwAAAHd3d3d3AAAAd3d3AAAAd3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3dxEXd3d3cAIiIiIAd3d3d3d3d3cAAAB3d3d3dwAAAHd3dwAAAHd3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3cRF3d3d3ACIiIiAHd3d3d3AHcAd3d3d3cAdwB3d3d3d3d3d3cAd3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3dxEXdxEXd3d3dxERF3d3dwAiIiIgB3d3d3dwB3AHd3d3d3AHcAd3d3d3d3d3d3AHd3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3F3cXF3cXd3d3EXFxF3d3cAIiIiIAd3d3d3cAdwB3d3d3d3d3AHd3d3d3d3d3dwB3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3Fxd3F3d3cRdxdxF3d3ACIiIiAHd3d3d3AHcAd3d3d3d3dwB3d3d3d3d3d3cAd3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3cREXdxEXd3dxF3cXdxF3dwAiIiIgB3d3d3dwB3AHd3d3d3d3cAd3d3d3d3d3d3AHd3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3F3d3F3cXd3d3d3F3cRd3cAIiIiIAd3d3d3cAdwB3d3d3d3d3AHd3d3d3d3d3dwB3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3dxERF3ERd3d3d3dxdxF3d3ACIiIiAHd3d3d3d3d3AAAAd3d3d3cAAAB3d3cAAAB3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3cXEXd3dwAiIiIgB3d3d3d3d3dwAAAHd3d3d3AAAAd3d3AAAAd3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3ERd3d3cAAAAAAAd3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3dxF3d3d3AAAAAAAHd3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3dwAAB3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3dw==)
+
+You can now test it my manually sending an event - paste the following on the
+left hand side and the app should update:
+
+```JS
+E.emit('myapp', "12345")
+```
+
+You could now save this as an app using [the instructions from the first tutorial](app.md#saving-as-an-app) but as
+it's saved in RAM, as long as we don't change back to the clock screen (long pressing the button) then
+you're fine.
+
+## Trying it out
+
+Now you can disconnect the Web IDE (on some platforms like Linux it's fine to leave it connected
+and then you can use it for debugging).
+
+* Go to the website you wanted to grab data from, like https://livecounts.io/youtube-live-view-counter/dQw4w9WgXcQ
+* Ensure the 'bookmarks bar' is showing (`Bookmarks -> Show Bookmark bar`)
+* Now click on the `Bangle.js Bookmarklet` you added
+* The webpage should go dark (if it doesn't you may want to check DevTools)
+* Click on the page and a Web Bluetooth prompt should pop up - select your Bangle.js
+
+And now your Bangle will show updated information direct from the webpage!
 
 ## Next steps?
 
 * We've used Bangle.js here because it's easy to use, but now you can
 escape from the browser you can control all kinds of different things.
-There are a few bits of more tangible hardware at the front that
-you can experiment with!
+There are [a few bits of more tangible hardware](hardware.md) at the front of the workshop
+that you can experiment with!
 * You can push information to a website as well as pulling from it. You can use
 the same mechanisms to push information into a website -
 for example sensor data from Bangle.js/Puck.js/etc or even use the Web Bluetooth
