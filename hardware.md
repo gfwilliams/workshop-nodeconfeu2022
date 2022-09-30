@@ -13,6 +13,15 @@ that's not working is written on the back.
 
 For full info on using these, see: https://www.espruino.com/Bangle.js2
 
+## Bangle.js 1
+
+There's a Bangle.js 1 available, encased in a wooden box. These have a brighter,
+more colourful screen than the Bangle.js 2.
+
+For full info on using it, see: https://www.espruino.com/Bangle.js
+
+
+
 ## Pixl.js
 
 ![](http://www.espruino.com/refimages/boards_Pixl.js_thumb.png)

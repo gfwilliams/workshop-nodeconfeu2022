@@ -253,9 +253,6 @@ app is running we can handle it, otherwise it is ignored:
 We could send `E.emit('myapp', 123)`, which will then call any event handlers
 which were previously added with `E.on('myapp', ...)`.
 
-### App
-
-First, let's make our app. This will respond to the event that we're sending.
 
 
 ## Next steps?
@@ -263,5 +260,5 @@ First, let's make our app. This will respond to the event that we're sending.
 We've used Bangle.js here because it's easy to use, but now you can
 escape from the browser you can control all kinds of different things.
 
-Gordon should have some slightly more tangible hardware at the front that
+There are a few bits of more tangible hardware at the front that
 you can experiment with!
