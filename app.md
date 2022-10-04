@@ -3,6 +3,9 @@
 
 ## Getting Started
 
+**Hopefully there are enough Bangle.js for everyone, but if not there's also an emulator! See below...**
+
+
 * First, turn on the Bangle if it's not already on - you'll need to hold down the button for around 2 seconds.
   * As soon as the screen changes from black, let go of the button so you don't enter bootloader mode.
 * Now, Bangle.js is booted and you should see something like this:
@@ -26,8 +29,8 @@ Bangle.js 2's main means of interaction is the touchscreen:
 
 
 * Go to https://www.espruino.com/ide **in Chrome** and in the top left, click the connect icon: ![](img/connect.png)
-
-* Now choose `Web Bluetooth` from the `Select a Port...` dialog
+* **If you don't have a Bangle**, choose `Emulator` followed by `Bangle.js 2`, and you're ready to go
+* **If you have a Bangle**, now choose `Web Bluetooth` from the `Select a Port...` dialog
   * If you don't see `Web Bluetooth`, click the `status` link for more information
     and ask if you're not sure what to do
 * In the `espruino.com wants to pair` window that pops up, look down the

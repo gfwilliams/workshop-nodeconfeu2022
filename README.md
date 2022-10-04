@@ -17,6 +17,8 @@ This workshop contains two main parts:
 
 For information on the hardware supplied for the workshop, see [The hardware page](hardware.md)
 
+There's also [a Tensorflow.js bonus part](tensorflow.md)
+
 **Note:** If a Bangle.js is connected to an Android phone via Gadgetbridge then you can do
 HTTP requests direct from it (http://www.espruino.com/Gadgetbridge#http-requests)
 which could be the best solution if the information you're available

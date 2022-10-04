@@ -141,7 +141,7 @@ Luckily it's not *that* bad! Paste this into the dev console of the page you wer
 
 ```JS
 var bluetoothDevice, bluetoothServer, bluetoothService, bluetoothTX;
-function bluetoothConnect() {
+function bluetoothConnect(finishedCb) {
   /*  First, put up a window to choose our device */
   navigator.bluetooth.requestDevice({ filters: [{services: ["6e400001-b5a3-f393-e0a9-e50e24dcca9e"]},{namePrefix: "Bangle.js"}]}).then(device => {
     /*  Now connect to it */
@@ -172,7 +172,8 @@ function bluetoothConnect() {
     return bluetoothRX.startNotifications();
   }).then(function() {    
     console.log("Completed!");
-/*     setInterval(poll,1000); */
+    if (finishedCb) finishedCb();
+    setInterval(poll,1000); 
   });
 }
 
@@ -281,7 +282,7 @@ javascript:(function(){
 
   /*  Bluetooth Handling   */
   var bluetoothDevice, bluetoothServer, bluetoothService, bluetoothTX;
-  function bluetoothConnect() {
+  function bluetoothConnect(finishedCb) {
     /*  First, put up a window to choose our device */
     navigator.bluetooth.requestDevice({ filters: [{services: ["6e400001-b5a3-f393-e0a9-e50e24dcca9e"]},{namePrefix: "Bangle.js"}]}).then(device => {
       /*  Now connect to it */
@@ -312,7 +313,8 @@ javascript:(function(){
       return bluetoothRX.startNotifications();
     }).then(function() {    
       console.log("Completed!");
-  /*     setInterval(poll,1000); */
+      if (finishedCb) finishedCb();
+      setInterval(poll,1000); 
     });
   }
 
@@ -338,7 +340,6 @@ javascript:(function(){
   modal.onclick = function() {
     document.body.removeChild(modal);
     bluetoothConnect();
-    setInterval(poll, 1000);
   };
 })();
 ```
@@ -395,7 +396,8 @@ function bluetoothConnect() {
     return bluetoothRX.startNotifications();
   }).then(function() {    
     console.log("Completed!");
-/*     setInterval(poll,1000); */
+    if (finishedCb) finishedCb();
+    setInterval(poll,1000);
   });
 }
 
@@ -420,7 +422,6 @@ var modal=document.createElement("div");modal.style="position:absolute;top:0px;l
 modal.onclick = function() {
   document.body.removeChild(modal);
   bluetoothConnect();
-  setInterval(poll, 1000);
 };
 })();
 ```
