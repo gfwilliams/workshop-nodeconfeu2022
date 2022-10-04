@@ -173,7 +173,7 @@ function bluetoothConnect(finishedCb) {
   }).then(function() {    
     console.log("Completed!");
     if (finishedCb) finishedCb();
-    setInterval(poll,1000); 
+    setInterval(poll,1000);
   });
 }
 
@@ -314,7 +314,7 @@ javascript:(function(){
     }).then(function() {    
       console.log("Completed!");
       if (finishedCb) finishedCb();
-      setInterval(poll,1000); 
+      setInterval(poll,1000);
     });
   }
 
@@ -497,6 +497,11 @@ and then you can use it for debugging).
 * Click on the page and a Web Bluetooth prompt should pop up - select your Bangle.js
 
 And now your Bangle will show updated information direct from the webpage!
+
+**Note:** to run your bookmarklet on Android, you need to type the
+bookmarklet's name into Chrome's address bar and run it from there, rather
+than running it from the Bookmarks page. 
+
 
 ## Next steps?
 
