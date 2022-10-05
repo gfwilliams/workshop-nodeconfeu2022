@@ -180,12 +180,18 @@ function bluetoothConnect(finishedCb) {
 function bluetoothWrite(str) {
   /*  FIXME - does not split what it written based on MTU! */
   if (!bluetoothTX) return;
+  var next;
+  if (str.length>20) {
+    next = str.substr(20);
+    str = str.substr(0,20);
+  }
   var u = new Uint8Array(str.length);
   for (var i=0;i<str.length;i++)
     u[i] = str.charCodeAt(i);
   console.log("Writing ",JSON.stringify(str));
   bluetoothTX.writeValue(u.buffer).then(function() {
-    console.log("Written!");
+    if (next) bluetoothWrite(next);
+    else console.log("Written!");
   });
 }
 ```
@@ -321,12 +327,18 @@ javascript:(function(){
   function bluetoothWrite(str) {
     /*  FIXME - does not split what it written based on MTU! */
     if (!bluetoothTX) return;
+    var next;
+    if (str.length>20) {
+      next = str.substr(20);
+      str = str.substr(0,20);
+    }
     var u = new Uint8Array(str.length);
     for (var i=0;i<str.length;i++)
       u[i] = str.charCodeAt(i);
     console.log("Writing ",JSON.stringify(str));
     bluetoothTX.writeValue(u.buffer).then(function() {
-      console.log("Written!");
+      if (next) bluetoothWrite(next);
+      else console.log("Written!");
     });
   }
   /*  Send to Espruino */
@@ -404,12 +416,18 @@ function bluetoothConnect() {
 function bluetoothWrite(str) {
   /*  FIXME - does not split what it written based on MTU! */
   if (!bluetoothTX) return;
+  var next;
+  if (str.length>20) {
+    next = str.substr(20);
+    str = str.substr(0,20);
+  }
   var u = new Uint8Array(str.length);
   for (var i=0;i<str.length;i++)
     u[i] = str.charCodeAt(i);
   console.log("Writing ",JSON.stringify(str));
   bluetoothTX.writeValue(u.buffer).then(function() {
-    console.log("Written!");
+    if (next) bluetoothWrite(next);
+    else console.log("Written!");
   });
 }
 /*  Send to Espruino */
